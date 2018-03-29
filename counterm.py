@@ -3,10 +3,11 @@ import sys, sqlite3, matplotlib, collections, bisect, itertools
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import numpy as np
+from sim import sim as monero_current
 
 __author__ = "Kevin Lee and Andrew Miller"
 __maintainer__ = "Kevin Lee"
-__email__ = "kevin.lee@columbia.edu"
+__email__ = "klee160@illinois.edu"
 
 # define some global variables
 CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW = 60
@@ -169,7 +170,7 @@ def sim(N,M,time,version='counterm', is_rct=True):
         rest.append(q)
     real = np.asarray(real)
     rest = np.asarray(rest)
-    outfile = "outfile_%d_mo_%d_mixins_%s" % (time, M, version)
+    outfile = "counterm_outfile_%d_mo_%d_mixins_%s" % (time, M, version)
     np.savez(outfile, real=real, rest=rest)
 
 def graph_figure(M, time, version='counterm', is_rct=False):
@@ -177,7 +178,7 @@ def graph_figure(M, time, version='counterm', is_rct=False):
     The recents, rest, and real mixins graphed separately on the same graph. These graphs can be 
     compared to the 0-mixin behavior graphs, and should be similar to Monero graphs.
     '''   
-    outfile = "counterm/outfile_%d_mo_%d_mixins_%s.npz" % (time, M, version)
+    outfile = "counterm_outfile_%d_mo_%d_mixins_%s.npz" % (time, M, version)
     npzfile = np.load(outfile)
     real = npzfile['real']
     rest = npzfile['rest']
@@ -209,7 +210,7 @@ def graph_guesser(time, is_rct=True):
         xs = []
         ys = []
         for M in range(1,16):
-            outfile = "counterm/outfile_%d_mo_%d_mixins_%s.npz" % (period, M, 'counterm')
+            outfile = "counterm_outfile_%d_mo_%d_mixins_%s.npz" % (period, M, 'counterm')
             npzfile = np.load(outfile)
             real = npzfile['real']
             rest = npzfile['rest']
@@ -251,7 +252,7 @@ def graph_guesser(time, is_rct=True):
         xs = []
         ys = []     
         for M in range(1,16):
-            outfile = "rctdata/outfile_%d_mo_%d_mixins_%s.npz" % (period, M, '0.10')
+            outfile = "current_outfile_%d_mo_%d_mixins_%s.npz" % (period, M, '0.10')
             npzfile = np.load(outfile)
             real = npzfile['real']
             recents = npzfile['recents']
@@ -301,7 +302,7 @@ def graph_anonset(time, is_rct=True):
         xs = []
         ys = []
         for M in range(1,16):
-            outfile = "counterm/nonplus/outfile_%d_mo_%d_mixins_%s.npz" % (period, M, 'counterm')
+            outfile = "counterm_outfile_%d_mo_%d_mixins_%s.npz" % (period, M, 'counterm')
             npzfile = np.load(outfile)
             real = npzfile['real']
             rest = npzfile['rest']
@@ -337,7 +338,7 @@ def graph_anonset(time, is_rct=True):
         xs = []
         ys = []
         for M in range(1,16):
-            outfile = "rctdata/outfile_%d_mo_%d_mixins_%s.npz" % (period, M, '0.10')
+            outfile = "current_outfile_%d_mo_%d_mixins_%s.npz" % (period, M, '0.10')
             npzfile = np.load(outfile)
             real = npzfile['real']
             recents = npzfile['recents']
@@ -365,11 +366,27 @@ def graph_anonset(time, is_rct=True):
     plt.title('Effective-untraceability Set vs Mixins, 100000 Trials')
     plt.savefig('anonset.png')
 
+def graph_fig12():
+    '''Performs all the simulations necessary to graph figure 12 in the paper, and then
+    saves it to anonset.png. Notice that this is done sequentially, and could be sped
+    up and done in parallel if each script is initiated separately.
+    '''
+    for M in range(1,16):
+        for period in [0,6,12]:
+            sim(100000, M, period, 'counterm', is_rct=True)
+            monero_current(100000, M, period, '0.10', is_rct=True)
+    graph_anonset()
+
 def main():
-    M = int(sys.argv[1])
-    period = int(sys.argv[2])
-    print 'Processing:', M, period
-    sim(100000,M, period,'counterm', is_rct=True)
+    try:
+        M = int(sys.argv[1])
+        period = int(sys.argv[2])
+    except:
+        print 'No arguments provided, defaulting to figure simulation...'
+        graph_fig12()
+    else:
+        print 'Processing:', M, period
+        sim(100000, M, period,'counterm', is_rct=True)
 
 try: __IPYTHON__
 except NameError:

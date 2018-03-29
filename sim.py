@@ -288,7 +288,7 @@ def sim(N,M,time,version='pre0.9', is_rct=False):
     recents = np.asarray(recents)
     rest = np.asarray(rest)
 
-    outfile = "outfile_%d_mo_%d_mixins_%s" % (time, M, version)
+    outfile = "current_outfile_%d_mo_%d_mixins_%s" % (time, M, version)
     np.savez(outfile, real=real, recents=recents, rest=rest)
 
 def graph_figure(M, time, version='pre0.9', is_rct=False):
