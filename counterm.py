@@ -46,7 +46,7 @@ def preprocess():
     '''
     global top_time, top_idx, time_diff, time_dict, time_dict_keys
     print 'Running preprocess first'
-    conn_1 = sqlite3.connect('outs.db')
+    conn_1 = sqlite3.connect('sim_2017_03_18.db')
     c_1 = conn_1.cursor()
     c_1.execute('''SELECT MAX(block_height) FROM out_table''')
     top_block, = c_1.fetchone()
@@ -142,7 +142,7 @@ def sample_mixins(amount, num_mix, period, version='counterm', is_rct=True):
     real = fetch_real_output(top_sim_time, top_global_idx)
     num_found = 0 
     while (num_found < num_mix):
-        time_back = np.power(10,(np.random.gamma(shape=19.28, scale=1/1.61)))+120
+        time_back = np.exp(np.random.gamma(shape=19.28, scale=1/1.61))+120
         candidate = fetch_mixin(top_sim_time, time_back, top_global_idx)
         if candidate is None:
         	continue
@@ -338,7 +338,7 @@ def graph_anonset(time, is_rct=True):
         xs = []
         ys = []
         for M in range(1,16):
-            outfile = "current_outfile_%d_mo_%d_mixins_%s.npz" % (period, M, '0.10')
+            outfile = "outfile_%d_mo_%d_mixins_%s.npz" % (period, M, '0.10')
             npzfile = np.load(outfile)
             real = npzfile['real']
             recents = npzfile['recents']

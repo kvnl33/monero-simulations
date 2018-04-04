@@ -1,5 +1,5 @@
 # simulation of the Monero selection process for different protocols
-import sys, sqlite3, matplotlib, collections, itertools, bisect, itertools
+import sys, sqlite3, matplotlib, collections, itertools, bisect, itertools, os
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,18 +32,6 @@ if 'amount_dict' not in globals():
     time_dict = collections.OrderedDict()
     time_dict_keys = []
 
-# Block number prior to RingCT: 1220516
-# Timestamp: 1484051929
-
-def extrap(x, xp, yp):
-    '''The function adds linear extrapolation to the np.interp function. It is called
-    in extrapolation simulations in which we want to measure top block heights in the future.
-    '''
-    y = np.interp(x, xp, yp)
-    y = np.where(x<xp[0], yp[0]+(x-xp[0])*(yp[0]-yp[1])/(xp[0]-xp[1]), y)
-    y = np.where(x>xp[-1], yp[-1]+(x-xp[-1])*(yp[-1]-yp[-2])/(xp[-1]-xp[-2]), y)
-    return y
-
 def amount_frequency():
     '''From the database we scraped blockchain data into, we get the denomination and frequencies
     of coins from the past month (~21900 blocks). We ignore RCT transactions b/c they are not going
@@ -51,10 +39,10 @@ def amount_frequency():
     because they are insignificant. Afterwards, the counts are used to weigh the denominations such
     that the sum of weights adds up to 1.
     '''
-    conn = sqlite3.connect('outs.db')
+    global amounts, weights
+    conn = sqlite3.connect('outs_2017_03_18.db')
     c_1 = conn.cursor()
     c_1.execute('''SELECT amount,count(*) FROM out_table WHERE block_height >= 1220516 - 21900 GROUP BY amount ORDER BY count(*) DESC''')
-    global amounts, weights
     recent = c_1.fetchall()
     for row in recent:
         if row[1] > 1000 and int(row[0]) != 0:
@@ -74,12 +62,12 @@ def preprocess(is_rct):
     transactions that were spent in-the-clear, because those will define our simulation behavior for choosing
     the real spend.
     '''
-    amount_frequency()
     global amount_dict, top_block, top_idx, time_diff, time_dict, time_dict_keys, top_time
+    amount_frequency()
     
     if len(amount_dict) == len(amounts): return
     print 'Running preprocess first'
-    conn_1 = sqlite3.connect('outs.db')
+    conn_1 = sqlite3.connect('outs_2017_03_18.db')
     c_1 = conn_1.cursor()
 
     if is_rct:
@@ -157,11 +145,6 @@ def preprocess(is_rct):
     recent_zones[0][12] = time_dict[rec12mo]
     time_dict_keys = time_dict.keys()
 
-    # 4 months = 175200 minutes, roughly 87600, so new block height = 1356480
-    # recent zone = 5 days behind, so approx block 1356480 - 3600 = 1352880
-    # 10 month = 438000 minutes, roughly 219000 blocks, so new block height = 1487880
-    # recent zone = 5 days behind, so 1487880 - 3600 = 1484280, start of recent zone
-
     conn = sqlite3.connect('zinput.db')
     c_2 = conn.cursor()
     cmd = '''SELECT tx_timestamp - mixin_timestamp as time_diff from first'''
@@ -208,7 +191,8 @@ def fetch_real_output(N, period, top_global_idx):
 def sample_mixins(amount, num_mix, period, version='pre0.9', is_rct=False):
     '''The mixin-sampling protocol in our simulation changes based on the version argument
     that is passed into it and reflects the different protocols Monero has employed since its 
-    inception. From a high-level, pre0.9 will select mixins from genesis to top-height uniformly,
+    inception (see https://github.com/monero-project/monero/blob/master/src/wallet/wallet2.cpp). 
+    From a high-level, pre0.9 will select mixins from genesis to top-height uniformly,
     ver0.9 will select mixins from genesis to top-height with a triangular distribution, and 0.10
     will employ ver0.9 selection, but also select uniformly across a recent zone (the past 5 days),
     and combine that with the other mixin candidates. The mixins are then uniformly selected from the
@@ -221,24 +205,23 @@ def sample_mixins(amount, num_mix, period, version='pre0.9', is_rct=False):
     assert version in ['pre0.9','0.9','0.10']
     if is_rct: assert version == '0.10', "RingCT only available after 0.10"
     mixin_vector = recent_vector = final_vector = []
-    top_global_idx = top_idx[amount] if is_rct==False else top_idx[amount][period]
-    recent_idx = recent_zones[amount] if is_rct==False else recent_zones[amount][period]
+    top_global_idx = top_idx[amount] if !is_rct else top_idx[amount][period]
+    recent_idx = recent_zones[amount] if !is_rct else recent_zones[amount][period]
     if (recent_idx < 0): recent_idx = 0
-    req = ((num_mix + 1) * 1.5) + 1
-    req = int(req)
+    req = int((num_mix + 1) * 1.5) + 1
     if is_rct: req += (CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW - CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE)
-    real = fetch_real_output(amount,period, top_global_idx)
-    recent_req = req * recent_ratio
-    recent_req = int(recent_req)
+    real = fetch_real_output(amount, period, top_global_idx)
+    recent_req = int(req * recent_ratio)
     if(recent_req<=1):
         recent_req = 1
     if(recent_req> top_global_idx-recent_idx+1):
         recent_req = top_global_idx-recent_idx+1
+
     if(real>=recent_idx/float(top_global_idx)):
         recent_req -= 1
     if version != '0.10': recent_req = 0
     num_found = 0
-    recent_found = 0 
+    recent_found = 0
     while (num_found < req):
         while (recent_found < recent_req):
             r = np.random.randint(recent_idx, top_global_idx+1)
@@ -275,6 +258,7 @@ def sim(N,M,time,version='pre0.9', is_rct=False):
     schemes on one simulation batch in the future. The simulation is run with 
     sim(# of trials, # of mixins), 0 to sample all, 6 for six months, 12 for 12 months.
     '''
+    real=recent=rest=[]
     preprocess(is_rct)
     real = recents = rest = []
     for x in range(0,N):
@@ -288,99 +272,8 @@ def sim(N,M,time,version='pre0.9', is_rct=False):
     recents = np.asarray(recents)
     rest = np.asarray(rest)
 
-    outfile = "current_outfile_%d_mo_%d_mixins_%s" % (time, M, version)
+    outfile = "outfile_%d_mo_%d_mixins_%s" % (time, M, version)
     np.savez(outfile, real=real, recents=recents, rest=rest)
-
-def graph_figure(M, time, version='pre0.9', is_rct=False):
-    '''Takes in results of the simulation runs and generates a graph of all simulation runs.
-    The recents, rest, and real mixins graphed separately on the same graph. These graphs can be 
-    compared to the 0-mixin behavior graphs, and should be similar to Monero graphs.
-    '''
-    outfile = "outfile_%d_mo_%d_mixins_%s.npz" % (time, M, version)
-    npzfile = np.load(outfile)
-
-    real = npzfile['real']
-    recents = npzfile['recents']
-    rest = npzfile['rest']
-    recents = list(itertools.chain.from_iterable(recents))
-    rest = list(itertools.chain.from_iterable(rest))
-    plt.ioff()
-    plt.clf()
-    plt.hist((1.0-np.array(rest), 1.0-np.array(recents), 1.0-np.array(real)), bins=np.logspace(-3,0, 200), normed=True, histtype='stepfilled', stacked=True, label=['Rest', 'Recents', 'Real'])
-    plt.ylim(ymin=0, ymax=70)
-    plt.xscale('log')
-    plt.xlabel('Mixin Offset (% of available)')
-    plt.ylabel('PDF')
-    plt.legend()
-    timestr = {0: 'Block XXX (TODO)',
-               6: '6 months',
-               12: '12 months'}[time]
-    rct_str = '(RingCT) ' if is_rct else ''
-    plt.title('%s Simulation at %s (%d Mixins, %d Trials)' % (rct_str, timestr, M, len(real)))
-    plt.savefig('resultsim_%d_%d_%s_%s.png' % (M, time, version, rct_str))
-
-def graph_guesser(time, is_rct=False):
-    '''Does the guess-most-recent algorithm on our simulation data, and adds to a running score for each mixin.
-    At the conclusion, the score vs mixin total is graphed.
-    '''
-    plt.ioff()
-    plt.clf()
-    if is_rct:
-        for period in [0,6,12]:
-            xs = []
-            ys = []
-            for M in range(1,16):
-                outfile = "outfile_%d_mo_%d_mixins_%s.npz" % (period, M, '0.10')
-                npzfile = np.load(outfile)
-                real = npzfile['real']
-                recents = npzfile['recents']
-                rest = npzfile['rest']
-                print real.shape, recents.shape, rest.shape
-                correct = 0
-                total = 0
-                for r1, r2, r3 in zip(real, recents, rest):
-                    total += 1
-                    if r1 >= np.max(np.concatenate((r2,r3))):
-                        correct += 1  
-                xs.append(M)
-                ys.append(1/(float(correct)/total))
-            plt.plot(xs, ys, '+-', label=period)
-    else:   
-        for version in ['pre0.9','0.9','0.10']:
-            xs = []
-            ys = []
-            for M in range(1,16):
-                outfile = "outfile_%d_mo_%d_mixins_%s.npz" % (time, M, version)
-                npzfile = np.load(outfile)
-                real = npzfile['real']
-                recents = npzfile['recents']
-                rest = npzfile['rest']
-                print real.shape, recents.shape, rest.shape
-                correct = 0
-                total = 0
-                for r1, r2, r3 in zip(real, recents, rest):
-                    total += 1
-                    if r1 >= np.max(np.concatenate((r2,r3))):
-                        correct += 1
-                xs.append(M)
-                ys.append(float(correct)/total)
-            if version == 'pre0.9':
-                label = "Pre v0.9"
-            elif version == '0.9':
-                label = "v0.9"
-            else:
-                label = "v0.10"
-            plt.plot(xs, ys, '+-', label=label)
-    xs = range(1,16)
-    ys = [1/float(_+1) for _ in xs]
-    plt.plot(xs, ys, '+-', label="Ideal")
-    plt.xlabel('Number of Mixins')
-    plt.ylabel('Fraction Correct')
-    axes = plt.gca()
-    axes.set_ylim([0,1])
-    plt.legend(loc='best')
-    plt.title('First-Guess, 100000 Trials')
-    plt.savefig('first_guess_all_prerct.png')
 
 def main():
     M = int(sys.argv[1])
