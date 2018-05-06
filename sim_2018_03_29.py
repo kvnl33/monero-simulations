@@ -1,5 +1,5 @@
 # simulation of the Monero selection process for different protocols
-import sys, sqlite3, matplotlib, collections, itertools, bisect, itertools, os
+import sys, sqlite3, matplotlib, collections, itertools, bisect, os
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,19 +11,18 @@ __email__ = "klee160@illinois.edu"
 #define some global variables
 CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW = 60
 CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE = 10
-recent_zone = 1.8 * 86400
-recent_ratio = 0.50
 rct_start = 1484051946
 top_block = None
 top_time = None
-top_idx = {}
-recent_zones = {}
+top_idx = None
+recent_zones = {"0.10": 5 * 86400, "0.11": 1.8 * 86400}
+recent_ratios = {"0.10": 0.25, "0.11": 0.50}
+recent_start = {}
 time_diff = []
 time_dict = collections.OrderedDict()
 time_dict_keys = []
 
-
-def preprocess():
+def preprocess(version="0.11"):
     '''Sets up the variables in the simulation. The most recent timestamp in the database is
     set to be the time of our simulation, the maximum global index for the each amount in the denominations
     we gleaned from the blockchain is found, as well as the global index corresponding to the recent zone 
@@ -49,16 +48,14 @@ def preprocess():
 
     cmd = '''SELECT MAX(g_idx) as idx from out_table'''
     c_1.execute(cmd)
-    top = c_1.fetchone()
-    top_idx[0] = {}
-    top_idx[0][0] = top[0]
+    top, = c_1.fetchone()
+    top_idx = top
 
     cmd = '''SELECT MIN(g_idx) as idx FROM out_table WHERE timestamp >= {start}'''
-    cmd = cmd.format(denom = 0, start = timenow - recent_zone)
+    cmd = cmd.format(denom = 0, start = timenow - recent_zones[version])
     c_1.execute(cmd)
-    recent = c_1.fetchone()
-    recent_zones[0] = {}
-    recent_zones[0][0] = recent[0]
+    recent, = c_1.fetchone()
+    recent_start[version] = recent
     print 'recent_zone', recent
 
     cmd = '''SELECT timestamp, MAX(g_idx) FROM out_table GROUP BY timestamp'''
@@ -81,7 +78,7 @@ def preprocess():
             time_diff.append(row[0])
     time_diff = np.asarray(time_diff)
 
-def fetch_real_output(period, top_global_idx):
+def fetch_real_output(top_global_idx):
     '''Randomly selects an output to be used as the real spend. A time difference is
     selected from our list of zero-input transactions we collected from the blockchain. Next,
     using the time difference, we find the closest global index if the block is in the 
@@ -98,7 +95,7 @@ def fetch_real_output(period, top_global_idx):
     real_g_idx = time_dict[time_dict_keys[closest]]
     return float(real_g_idx)/top_global_idx
 
-def sample_mixins(num_mix, period, is_rct=True):
+def sample_mixins(num_mix, is_rct=True, version='0.11'):
     '''The mixin-sampling protocol in our simulation changes based on the version argument
     that is passed into it and reflects the different protocols Monero has employed since its 
     inception (see https://github.com/monero-project/monero/blob/master/src/wallet/wallet2.cpp). 
@@ -111,9 +108,9 @@ def sample_mixins(num_mix, period, is_rct=True):
     transaction, and we gauge that based on version. We normalize the mixin returned by dividing the 
     real index by the top index. For instance, if the top index is Y and the chosen index is X, we return X/Y.
     '''        
-    mixin_vector = recent_vector = final_vector = []    
-    top_global_idx = top_idx[0][period]
-    recent_idx = recent_zones[0][period]
+    mixin_vector, recent_vector, final_vector = ([] for i in range(3))
+    top_global_idx = top_idx
+    recent_idx = recent_start[version]
 
     if (recent_idx < 0):
         recent_idx = 0
@@ -121,8 +118,8 @@ def sample_mixins(num_mix, period, is_rct=True):
     req = int(req)
     if is_rct:
         req += (CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW - CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE)
-    real = fetch_real_output(period, top_global_idx)
-    recent_req = req * recent_ratio
+    real = fetch_real_output(top_global_idx)
+    recent_req = req * recent_ratios[version]
     recent_req = int(recent_req)
     if(recent_req<=1):
         recent_req = 1
@@ -136,8 +133,10 @@ def sample_mixins(num_mix, period, is_rct=True):
     recent_found = 0 
     while (num_found < req):
         while (recent_found < recent_req):
-            r = int(np.random.triangular(recent_idx, top_global_idx, top_global_idx))
-            r = np.random.randint(recent_idx, top_global_idx+1)
+            if version == "0.11":
+                r = int(np.random.triangular(recent_idx, top_global_idx, top_global_idx))
+            else:
+                r = np.random.randint(recent_idx, top_global_idx+1)
             rmixin = r/float(top_global_idx)
             if (rmixin not in recent_vector and rmixin != real):
                 recent_vector.append(rmixin)
@@ -161,7 +160,7 @@ def sample_mixins(num_mix, period, is_rct=True):
     rest = filter(lambda x: x not in recent_mixins, final_vector)
     return real, recent_mixins, rest
 
-def sim(N, M, time, version='morerecent', is_rct=True):
+def sim(N, M, version='0.11', is_rct=True):
     '''The main simulation function starts the simulations. The simulation is run N times
     with M mixins chosen. We normalize the mixin returned by dividing the 
     real index by the top index. For instance, if the top index is Y and the chosen index is X, 
@@ -171,11 +170,11 @@ def sim(N, M, time, version='morerecent', is_rct=True):
     schemes on one simulation batch in the future. The simulation is run with 
     sim(# of trials, # of mixins).
     '''
-    real = recents = rest = []
-    preprocess()
+    real, recents, rest = ([] for i in range(3))
+    preprocess(version)
     for x in range(0,N):
         print(x+1)
-        n, p, q = sample_mixins(M, time, is_rct)
+        n, p, q = sample_mixins(M, is_rct, version)
         real.append(n)
         recents.append(p)
         rest.append(q)
@@ -187,8 +186,9 @@ def sim(N, M, time, version='morerecent', is_rct=True):
 
 def main():
     M = int(sys.argv[1])
+    ver = sys.argv[2]
     print 'Processing:', M
-    sim(100000, M, 0, version="morerecent", is_rct=True)
+    sim(100000, M, ver, is_rct=True)
 
 try: __IPYTHON__
 except NameError:

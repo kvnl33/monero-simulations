@@ -1,5 +1,5 @@
 # simulation of the Monero selection process for different protocols
-import sys, sqlite3, matplotlib, collections, itertools, bisect, itertools, os
+import sys, sqlite3, matplotlib, collections, itertools, bisect, os
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,6 +31,15 @@ if 'amount_dict' not in globals():
     time_diff = []
     time_dict = collections.OrderedDict()
     time_dict_keys = []
+
+def extrap(x, xp, yp):
+    '''The function adds linear extrapolation to the np.interp function. It is called
+    in extrapolation simulations in which we want to measure top block heights in the future.
+    '''
+    y = np.interp(x, xp, yp)
+    y = np.where(x<xp[0], yp[0]+(x-xp[0])*(yp[0]-yp[1])/(xp[0]-xp[1]), y)
+    y = np.where(x>xp[-1], yp[-1]+(x-xp[-1])*(yp[-1]-yp[-2])/(xp[-1]-xp[-2]), y)
+    return y
 
 def amount_frequency():
     '''From the database we scraped blockchain data into, we get the denomination and frequencies
@@ -132,13 +141,22 @@ def preprocess(is_rct):
     for row in recent:
         time_dict[row[0]] = row[1]
 
-    npzfile = np.load("extrap_time_dict.npz")
-    ts = npzfile["ts"]
-    g = npzfile["g"]
-
+    if os.path.isfile("extrap_time_dict.npz"):
+        npzfile = np.load("extrap_time_dict.npz")
+        ts = npzfile["ts"]
+        g = npzfile["g"]
+    else:
+        ts, g = ([] for i in range(2))
+        for f in range(top_time+1, top12mo+1):
+            ts.append(f)
+            done = int(extrap(f,x,y))
+            g.append(done)
+        ts = np.asarray(ts)
+        g = np.asarray(g)
+        outfile = "extrap_time_dict"
+        np.savez(outfile, ts = ts, g = g)
     for a,b in itertools.izip(ts,g):
     	time_dict[a] = b
-
     top_idx[0][6] = time_dict[top06mo]
     top_idx[0][12] = time_dict[top12mo]
     recent_zones[0][6] = time_dict[rec06mo]
@@ -204,9 +222,9 @@ def sample_mixins(amount, num_mix, period, version='pre0.9', is_rct=False):
     '''
     assert version in ['pre0.9','0.9','0.10']
     if is_rct: assert version == '0.10', "RingCT only available after 0.10"
-    mixin_vector = recent_vector = final_vector = []
-    top_global_idx = top_idx[amount] if !is_rct else top_idx[amount][period]
-    recent_idx = recent_zones[amount] if !is_rct else recent_zones[amount][period]
+    mixin_vector, recent_vector, final_vector = ([] for i in range(3))
+    top_global_idx = top_idx[amount] if not is_rct else top_idx[amount][period]
+    recent_idx = recent_zones[amount] if not is_rct else recent_zones[amount][period]
     if (recent_idx < 0): recent_idx = 0
     req = int((num_mix + 1) * 1.5) + 1
     if is_rct: req += (CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW - CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE)
@@ -258,9 +276,8 @@ def sim(N,M,time,version='pre0.9', is_rct=False):
     schemes on one simulation batch in the future. The simulation is run with 
     sim(# of trials, # of mixins), 0 to sample all, 6 for six months, 12 for 12 months.
     '''
-    real=recent=rest=[]
     preprocess(is_rct)
-    real = recents = rest = []
+    real, recents, rest = ([] for i in range(3))
     for x in range(0,N):
         print(x+1)
         m = np.random.choice(amounts, p=weights) if is_rct == False else 0
@@ -277,10 +294,9 @@ def sim(N,M,time,version='pre0.9', is_rct=False):
 
 def main():
     M = int(sys.argv[1])
-    ver = sys.argv[2]
-    time = sys.argv[3]
-    print 'Processing:', M, ver
-    sim(100000, M, 0, ver, is_rct=False)
+    time = int(sys.argv[2])
+    print 'Processing:', M, time
+    sim(100000, M, time, '0.10', is_rct=True)
 
 try: __IPYTHON__
 except NameError:
