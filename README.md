@@ -24,15 +24,18 @@ The data we scraped from the blockchain are in  ```zinput.db```, ```outs_2017_03
 
 The databases are not included due to size restrictions, but are hosted [here](http://monerolink.com/). Alternatively, the CREATE statement(s) for the tables in the database are:
 
-* ```zinput.db```: ```sqlite3
+#### zinput.db
+```sqlite3
 CREATE TABLE first (tx_hash STRING, block_height INTEGER, amount INTEGER, mixin_height INTEGER, tx_timestamp INTEGER, mixin_timestamp INTEGER, mixin_tx STRING);
 CREATE INDEX idx on first (tx_timestamp, mixin_timestamp);
 ```
-* ```outs_2017_03_18.db```: ```sqlite3
+#### outs_2017_03_18.db
+```sqlite3
 CREATE TABLE out_table (tx_hash STRING, block_height INTEGER, amount INTEGER, g_idx INTEGER, timestamp INTEGER);
 CREATE INDEX idx ON out_table (amount, timestamp, block_height);
-```   
-* ```outs_2018_03_29.db```: ```sqlite3
+```
+#### outs_2018_03_29.db
+```sqlite3
 CREATE TABLE out_table (block_hash STRING, block_height INTEGER, tx_hash STRING, timestamp INTEGER, outkey STRING, g_idx INTEGER);
 ```    
 
