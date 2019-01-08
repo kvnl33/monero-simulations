@@ -13,7 +13,28 @@ The simulations for current and past mixin-sampling protocols are found in ```si
 
 Our simulation involves selecting real data from the blockchain that was scraped into our databases. We use the most recent time to simulate our transaction time, and uniformly select a time difference between fund creation and spend for zero-input transactions (spending in the clear) to select a **real spend**. Note that zero-input transactions have no mixins, and thus accurately reflect user spending behavior. Because funds are timestamped, we select the output that is closest to the difference between the transaction time and selected time difference. Afterwards, candidate mixins are selected based on the version we are simulating, and of those, a final obfuscation set is selected with the the real spend included. 
 
-In designing this method, we decided to simulate on denominations from the past 30 days as to give less weight to stale denominations, though the top 10 most frequent denominations do not vary much. Also, we ignore amounts that have fewer than 1000 occurances, as those are not significant. Because each denomination occurs a different number of times, we return the mixin-offset; i.e., the global index of the the real spend or mixin divided by the top global index for that fund. This allows for meaningful graphs and trends.   
+In designing this method, we decided to simulate on denominations from the past 30 days as to give less weight to stale denominations, though the top 10 most frequent denominations do not vary much. Also, we ignore amounts that have fewer than 1000 occurances, as those are not significant. Because each denomination occurs a different number of times, we return the mixin-offset; i.e., the global index of the the real spend or mixin divided by the top global index for that fund. This allows for meaningful graphs and trends.
+
+### Blockchain Data
+
+The data we scraped from the blockchain are in  ```zinput.db```, ```outs_2017_03_18.db```, and ```outs_2018_03_29.db```. These were all collected by synchronizing a local copy of the Monero blockchain from a running full node up to the date of our experiment, and then connecting our scraper to the blockchain and parsing relevant data.
+* ```zinput.db``` contains all 0-mixin transaction data.
+* ```outs_2017_03_18.db``` contains all created outputs in the network from genesis to block 1268880. 
+* ```outs_2018_03_29.db``` contains all created RingCT outputs in the network from block 1220517 (start of RingCT) to 1540516. 
+
+The databases are not included due to size restrictions, but are hosted [here](http://monerolink.com/). Alternatively, the CREATE statement(s) for the tables in the database are:
+
+* ```zinput.db```: ```sqlite3
+CREATE TABLE first (tx_hash STRING, block_height INTEGER, amount INTEGER, mixin_height INTEGER, tx_timestamp INTEGER, mixin_timestamp INTEGER, mixin_tx STRING);
+CREATE INDEX idx on first (tx_timestamp, mixin_timestamp);
+```
+* ```outs_2017_03_18.db```: ```sqlite3
+CREATE TABLE out_table (tx_hash STRING, block_height INTEGER, amount INTEGER, g_idx INTEGER, timestamp INTEGER);
+CREATE INDEX idx ON out_table (amount, timestamp, block_height);
+```   
+* ```outs_2018_03_29.db```: ```sqlite3
+CREATE TABLE out_table (block_hash STRING, block_height INTEGER, tx_hash STRING, timestamp INTEGER, outkey STRING, g_idx INTEGER);
+```    
 
 ## Countermeasure
 
