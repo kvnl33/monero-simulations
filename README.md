@@ -2,6 +2,8 @@
 
 These are the simulation files used in our paper to model the distribution of the different mixin-sampling protocols deployed in Monero. We use the Monte Carlo method to run 100000 independent transaction simulations for each mixin number specified, and for each version of the mixin-sampling protocol (pre v0.9, v0.9, v0.10, v0.10 with RingCT, and v0.11). In order to simulate growth, we also linearly extrapolate what the distribution would look like at 6 months and 12 months. 
 
+This repository does not contain the deducibility analysis using the Sudoku algorithm. It can be found at [maltemoeser/moneropaper](https://github.com/maltemoeser/moneropaper).
+
 ## Background
 
 The simulations for current and past mixin-sampling protocols are found in ```sim_2017_03_18.py``` and ```sim_2018_03_29.py```. To highlight, here are the key differences between sampling protocols:
@@ -77,4 +79,4 @@ For instance, running ```python grapher.py -p 8 -f figure.png``` will spawn 8 wo
 
 ### Related work
 
-Our paper, **An Empirical Analysis of Traceability in the Monero Blockchain**, is set to appear at PETS 2018. It can be found [here](https://arxiv.org/pdf/1704.04299.pdf).
+Our paper, **An Empirical Analysis of Traceability in the Monero Blockchain**, was presented at PETS 2018. It can be found [here](https://arxiv.org/pdf/1704.04299.pdf).
