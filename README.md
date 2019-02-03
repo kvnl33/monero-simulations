@@ -25,6 +25,7 @@ The data we scraped from the blockchain are in  ```zinput.db```, ```outs_2017_03
 * ```outs_2018_03_29.db``` contains all created RingCT outputs in the network from block 1220517 (start of RingCT) to 1540516. 
 
 The databases are not included due to size restrictions, but are hosted [here](https://uofi.box.com/s/0tu8i9hezx11geujl5e3q3dufm6smxgd). The MD5 hashes of the files are:
+
 | File      | MD5SUM |
 | ----------- | ----------- |
 | ```zinput.db```      | ecc667e72b234a9311fb7c5b2fdc85aab |
