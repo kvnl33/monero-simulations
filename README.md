@@ -87,4 +87,4 @@ For instance, running ```python grapher.py -p 8 -f figure.png``` will spawn 8 wo
 
 ### Related work
 
-Our paper, **An Empirical Analysis of Traceability in the Monero Blockchain**, was presented at PETS 2018. It can be found [here](https://arxiv.org/pdf/1704.04299.pdf).
+Our paper, **An Empirical Analysis of Traceability in the Monero Blockchain**, was presented at PETS 2018. It can be found [here](https://doi.org/10.1515/popets-2018-0025).
